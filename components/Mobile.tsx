@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, useDragControls } from "motion/react";
-import { CONTRASTS, Contrast, FONTS, Item, KIND_SPEC, NavTab, PALETTES, Palette, SHAPES, ShapeScale, Theme, defaultTabsFor, iconSlotsOf, setIconSlot } from "@/lib/tokens";
+import { CONTRASTS, Contrast, FONTS, Item, Kind, KIND_ORDER, KIND_SPEC, NavTab, PALETTES, Palette, SHAPES, ShapeScale, Theme, defaultTabsFor, iconSlotsOf, setIconSlot, Frame, frameSizeOf } from "@/lib/tokens";
 import { ensureFontLoaded } from "@/lib/theme";
 import { KIND_TEXT, LANGS, Lang, t, useLang } from "@/lib/i18n";
 import { IconPicker } from "./IconPicker";
@@ -12,7 +12,7 @@ import { Field, IconBtn, Segmented, Toggle } from "./ui";
 
 /** Sheet that slides up from the bottom edge; the canvas above stays usable.
  *  Dragging the handle moves the sheet with the finger; a flick or a long pull closes it. */
-export function BottomSheet({ p, onClose, children }: { p: Palette; onClose: () => void; children: React.ReactNode }) {
+export function BottomSheet({ p, onClose, children, maxHeight = "72%" }: { p: Palette; onClose: () => void; children: React.ReactNode; maxHeight?: string }) {
   const lang = useLang();
   const controls = useDragControls();
   return (
@@ -35,7 +35,7 @@ export function BottomSheet({ p, onClose, children }: { p: Palette; onClose: () 
         left: 0,
         right: 0,
         bottom: 0,
-        maxHeight: "72%",
+        maxHeight,
         display: "flex",
         flexDirection: "column",
         borderTopLeftRadius: 28,
@@ -129,7 +129,6 @@ export function MobileInspector({
     for (let i = 0; i < n; i++) next.push(tabs[i] ? { ...tabs[i] } : { ...defaults[i % defaults.length] });
     onChange({ tabs: next, selected: item.selected !== undefined && item.selected >= n ? undefined : item.selected });
   };
-  /* a dropdown's rows are options: no icons, and one of them may be the initial value */
   const isSelect = item.kind === "select";
 
   return (
@@ -567,3 +566,361 @@ export function MobileActionBar({
     </div>
   );
 }
+
+/* ========== NEW: FULL MOBILE EXPERIENCE ========== */
+
+export type MobileSheet = "edit" | "settings" | "lang" | "parts" | "layers" | "theme" | "prompt" | "frames" | null;
+
+const PART_CATEGORIES: { id: string; label: string; icon: string; kinds: Kind[] }[] = [
+  { id: "actions", label: "Actions", icon: "touch_app", kinds: ["button", "iconButton", "fab", "extendedFab", "splitButton", "chip"] },
+  { id: "bars", label: "Bars", icon: "toolbar", kinds: ["topAppBar", "bottomNav", "navRail", "tabs", "toolbar"] },
+  { id: "containers", label: "Containers", icon: "view_agenda", kinds: ["card", "box", "bottomSheet", "divider"] },
+  { id: "lists", label: "Lists", icon: "list", kinds: ["listItem", "carousel"] },
+  { id: "inputs", label: "Inputs", icon: "edit", kinds: ["textField", "searchBar", "select", "switch", "checkbox", "radio", "slider"] },
+  { id: "indicators", label: "Indicators", icon: "progress_activity", kinds: ["linearProgress", "circularProgress", "loadingIndicator", "chip"] },
+  { id: "media", label: "Media", icon: "image", kinds: ["image", "camera", "map", "text"] },
+  { id: "other", label: "Other", icon: "widgets", kinds: ["snackbar", "dialog", "fabMenu"] },
+];
+
+export function MobileBottomNav({ p, active, onChange, onAdd }: { p: Palette; active: MobileSheet; onChange: (s: MobileSheet) => void; onAdd: () => void }) {
+  const lang = useLang();
+  const tabs: { key: MobileSheet; icon: string; label: string }[] = [
+    { key: null, icon: "home", label: "Canvas" },
+    { key: "parts", icon: "add_box", label: t("parts", lang) },
+    { key: "layers", icon: "layers", label: t("layers", lang) },
+    { key: "theme", icon: "palette", label: t("colors", lang) },
+    { key: "prompt", icon: "auto_awesome", label: t("prompt", lang) },
+  ];
+  return (
+    <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 50, paddingBottom: "calc(var(--bottom-ui, 0px) + env(safe-area-inset-bottom))", pointerEvents: "none" }}>
+      <div style={{ display: "flex", justifyContent: "center", padding: "0 8px 8px", pointerEvents: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 2, padding: 6, borderRadius: 28, background: p.surface, boxShadow: "0 6px 18px rgba(0,0,0,0.18)", maxWidth: 420, width: "100%" }}>
+          {tabs.map((tab) => {
+            const on = active === tab.key;
+            return (
+              <button
+                key={String(tab.key)}
+                onClick={() => onChange(tab.key)}
+                className="m3-press"
+                style={{
+                  flex: 1,
+                  height: 48,
+                  borderRadius: 24,
+                  border: "none",
+                  background: on ? p.secondaryContainer : "transparent",
+                  color: on ? p.onSecondaryContainer : p.onSurfaceVariant,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 2,
+                  cursor: "pointer",
+                }}
+              >
+                <Icon name={tab.icon} size={20} fill={on} />
+                <span style={{ fontSize: 10, fontWeight: 700, lineHeight: 1 }}>{tab.label}</span>
+              </button>
+            );
+          })}
+          <button
+            onClick={onAdd}
+            className="m3-press"
+            style={{
+              width: 56,
+              height: 48,
+              borderRadius: 24,
+              border: "none",
+              background: p.primary,
+              color: p.onPrimary,
+              display: "grid",
+              placeItems: "center",
+              cursor: "pointer",
+              marginLeft: 4,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+            }}
+          >
+            <Icon name="add" size={26} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function MobileFramesStrip({ p, frames, selectedId, onSelect, onAdd }: { p: Palette; frames: Frame[]; selectedId: string | null; onSelect: (id: string) => void; onAdd: () => void }) {
+  const lang = useLang();
+  return (
+    <div style={{ position: "absolute", left: 0, right: 0, top: 64, zIndex: 39, pointerEvents: "none" }}>
+      <div className="no-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", padding: "8px 12px", pointerEvents: "auto" }}>
+        {frames.map((f) => {
+          const on = f.id === selectedId;
+          const sz = frameSizeOf(f);
+          return (
+            <button
+              key={f.id}
+              onClick={() => onSelect(f.id)}
+              className="m3-press"
+              style={{
+                flex: "0 0 auto",
+                height: 36,
+                padding: "0 14px",
+                borderRadius: 18,
+                border: on ? `2px solid ${p.primary}` : `1px solid ${p.outlineVariant}`,
+                background: on ? p.primaryContainer : p.surface,
+                color: on ? p.onPrimaryContainer : p.onSurface,
+                fontSize: 12,
+                fontWeight: 700,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                whiteSpace: "nowrap",
+              }}
+            >
+              <Icon name={sz.w > 500 ? "desktop_windows" : "smartphone"} size={16} />
+              {f.name} 
+              <span style={{ opacity: 0.6, fontWeight: 400 }}>{sz.w}×{sz.h}</span>
+            </button>
+          );
+        })}
+        <button
+          onClick={onAdd}
+          className="m3-press"
+          style={{
+            flex: "0 0 auto",
+            height: 36,
+            padding: "0 12px",
+            borderRadius: 18,
+            border: `1px dashed ${p.outline}`,
+            background: "transparent",
+            color: p.primary,
+            fontSize: 12,
+            fontWeight: 700,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+          }}
+        >
+          <Icon name="add" size={16} /> {t("addFrame", lang)}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function MobilePartsSheet({ p, onAdd, onClose }: { p: Palette; onAdd: (k: Kind) => void; onClose: () => void }) {
+  const lang = useLang();
+  const [cat, setCat] = useState<string>("actions");
+  const activeCat = PART_CATEGORIES.find((c) => c.id === cat) ?? PART_CATEGORIES[0];
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 20, background: p.primaryContainer, color: p.onPrimaryContainer, display: "grid", placeItems: "center" }}>
+          <Icon name="add_box" size={22} />
+        </div>
+        <span style={{ fontSize: 18, fontWeight: 800, color: p.onSurface, flex: 1 }}>{t("parts", lang)}</span>
+        <IconBtn icon="close" p={p} size={40} onClick={onClose} />
+      </div>
+      <div className="no-scrollbar" style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 8 }}>
+        {PART_CATEGORIES.map((c) => {
+          const on = c.id === cat;
+          return (
+            <button
+              key={c.id}
+              onClick={() => setCat(c.id)}
+              className="m3-press"
+              style={{
+                flex: "0 0 auto",
+                height: 36,
+                padding: "0 14px 0 10px",
+                borderRadius: 18,
+                border: "none",
+                background: on ? p.secondaryContainer : p.surfaceContainerHigh,
+                color: on ? p.onSecondaryContainer : p.onSurfaceVariant,
+                fontSize: 13,
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <Icon name={c.icon} size={18} fill={on} /> {c.label}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+        {activeCat.kinds.map((k) => {
+          const spec = KIND_SPEC[k];
+          if (!spec) return null;
+          return (
+            <button
+              key={k}
+              onClick={() => onAdd(k)}
+              className="m3-press"
+              style={{
+                height: 72,
+                borderRadius: 16,
+                border: `1px solid ${p.outlineVariant}`,
+                background: p.surface,
+                color: p.onSurface,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                cursor: "pointer",
+                padding: 8,
+              }}
+            >
+              <div style={{ width: 36, height: 36, borderRadius: 18, background: p.surfaceContainerHigh, display: "grid", placeItems: "center", color: p.onSurfaceVariant }}>
+                <Icon name={spec.paletteIcon} size={20} />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 700, textAlign: "center", lineHeight: 1.2 }}>{KIND_TEXT[lang][k]?.noun ?? spec.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+        {KIND_ORDER.filter((k) => !PART_CATEGORIES.some((c) => c.kinds.includes(k))).slice(0, 9).map((k) => {
+          const spec = KIND_SPEC[k];
+          if (!spec) return null;
+          return (
+            <button key={k} onClick={() => onAdd(k)} className="m3-press" style={{ height: 56, borderRadius: 14, border: `1px solid ${p.outlineVariant}`, background: p.surfaceContainerLow, color: p.onSurfaceVariant, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 }}>
+              <Icon name={spec.paletteIcon} size={18} />
+              <span style={{ fontSize: 10, fontWeight: 600 }}>{spec.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export function MobileLayersSheet({ p, children, onClose }: { p: Palette; children: React.ReactNode; onClose: () => void }) {
+  const lang = useLang();
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 20, background: p.secondaryContainer, color: p.onSecondaryContainer, display: "grid", placeItems: "center" }}>
+          <Icon name="layers" size={22} />
+        </div>
+        <span style={{ fontSize: 18, fontWeight: 800, color: p.onSurface, flex: 1 }}>{t("layers", lang)}</span>
+        <IconBtn icon="close" p={p} size={40} onClick={onClose} />
+      </div>
+      <div style={{ maxHeight: "60vh", overflowY: "auto" }} className="no-scrollbar">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function MobileThemeSheet({ p, paletteKey, onPalette, theme, onTheme, onClose }: { p: Palette; paletteKey: string; onPalette: (k: string) => void; theme: Theme; onTheme: (patch: Partial<Theme>) => void; onClose: () => void }) {
+  const lang = useLang();
+  const [tab, setTab] = useState<"color" | "shape" | "type" | "motion">("color");
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 20, background: p.tertiaryContainer, color: p.onTertiaryContainer, display: "grid", placeItems: "center" }}>
+          <Icon name="palette" size={22} />
+        </div>
+        <span style={{ fontSize: 18, fontWeight: 800, color: p.onSurface, flex: 1 }}>{t("theme", lang)}</span>
+        <IconBtn icon="close" p={p} size={40} onClick={onClose} />
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        {[
+          { k: "color", icon: "palette", label: t("colors", lang) },
+          { k: "shape", icon: "rounded_corner", label: t("shape", lang) },
+          { k: "type", icon: "text_fields", label: t("typography", lang) },
+          { k: "motion", icon: "animation", label: t("motion", lang) },
+        ].map((it) => {
+          const on = tab === it.k;
+          return (
+            <button key={it.k} onClick={() => setTab(it.k as any)} className="m3-press" style={{ flex: 1, height: 44, borderRadius: 22, border: "none", background: on ? p.primary : p.surfaceContainerHigh, color: on ? p.onPrimary : p.onSurfaceVariant, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2 }}>
+              <Icon name={it.icon} size={18} fill={on} />
+              <span style={{ fontSize: 10, fontWeight: 700 }}>{it.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      {tab === "color" && (
+        <>
+          <Row icon="brightness_6" label={t("brightness", lang)} p={p}>
+            <Segmented<"light" | "dark">
+              options={[
+                { key: "light", icon: "light_mode", label: t("light", lang) },
+                { key: "dark", icon: "dark_mode", label: t("dark", lang) },
+              ]}
+              value={theme.dark ? "dark" : "light"}
+              onChange={(k) => onTheme({ dark: k === "dark" })}
+              p={p}
+              height={48}
+            />
+            <div style={{ marginTop: 8 }}>
+              <Toggle on={theme.bothModes} onChange={(bothModes) => onTheme({ bothModes })} p={p} icon="routine" label={t("bothModes", lang)} grow />
+            </div>
+          </Row>
+          <Row icon="palette" label={t("theme", lang)} p={p}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {PALETTES.map((pal) => {
+                const on = pal.key === paletteKey;
+                return (
+                  <button key={pal.key} onClick={() => onPalette(pal.key)} aria-pressed={on} className="m3-press" style={{ width: 52, height: 52, borderRadius: 26, border: "none", background: pal.primary, color: pal.onPrimary, display: "grid", placeItems: "center", outline: on ? `3px solid ${p.onSurface}` : "3px solid transparent", outlineOffset: 3 }}>
+                    {on && <Icon name="check" size={24} />}
+                  </button>
+                );
+              })}
+            </div>
+          </Row>
+          <Row icon="contrast" label={t("contrast", lang)} p={p}>
+            <Segmented<Contrast> options={CONTRASTS.map((c) => ({ key: c.key, label: c.key === "high" ? t("contrastHigh", lang) : c.key === "medium" ? t("contrastMedium", lang) : t("contrastStandard", lang) }))} value={theme.contrast} onChange={(contrast) => onTheme({ contrast })} p={p} height={48} />
+          </Row>
+        </>
+      )}
+      {tab === "shape" && (
+        <Row icon="rounded_corner" label={t("shape", lang)} p={p}>
+          <Segmented<ShapeScale> options={SHAPES.map((s) => ({ key: s.key, icon: s.icon, label: s.key }))} value={theme.shape} onChange={(shape) => onTheme({ shape })} p={p} height={48} />
+        </Row>
+      )}
+      {tab === "type" && (
+        <Row icon="text_fields" label={t("typography", lang)} p={p}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {FONTS.map((f) => {
+              const on = theme.font === f.key;
+              ensureFontLoaded(f.key);
+              return (
+                <button key={f.key} onClick={() => onTheme({ font: f.key })} aria-pressed={on} className="m3-press" style={{ height: 52, borderRadius: 16, border: "none", background: on ? p.secondaryContainer : p.surfaceContainerHigh, color: on ? p.onSecondaryContainer : p.onSurface, fontFamily: f.family, fontSize: 15, fontWeight: 600, display: "flex", alignItems: "center", gap: 12, padding: "0 16px" }}>
+                  {on && <Icon name="check" size={20} />} {f.label}
+                </button>
+              );
+            })}
+            <Toggle on={theme.emphasized} onChange={(emphasized) => onTheme({ emphasized })} p={p} icon="format_bold" label={t("emphasized", lang)} />
+          </div>
+        </Row>
+      )}
+      {tab === "motion" && (
+        <Row icon="animation" label={t("motion", lang)} p={p}>
+          <Segmented<"standard" | "expressive"> options={[{ key: "standard", label: t("motionStandard", lang) }, { key: "expressive", label: t("motionExpressive", lang) }]} value={theme.motion} onChange={(motion) => onTheme({ motion })} p={p} height={48} />
+        </Row>
+      )}
+    </div>
+  );
+}
+
+export function MobilePromptSheet({ p, children, onClose }: { p: Palette; children: React.ReactNode; onClose: () => void }) {
+  const lang = useLang();
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 20, background: p.primary, color: p.onPrimary, display: "grid", placeItems: "center" }}>
+          <Icon name="auto_awesome" size={22} />
+        </div>
+        <span style={{ fontSize: 18, fontWeight: 800, color: p.onSurface, flex: 1 }}>{t("prompt", lang)}</span>
+        <IconBtn icon="close" p={p} size={40} onClick={onClose} />
+      </div>
+      <div style={{ maxHeight: "60vh", overflowY: "auto" }} className="no-scrollbar">
+        {children}
+      </div>
+    </div>
+  );
+}
+

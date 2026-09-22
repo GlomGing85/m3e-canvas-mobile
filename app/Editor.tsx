@@ -133,7 +133,7 @@ import { ShareDialog } from "@/components/ShareMenu";
 import { ColorPanel } from "@/components/ColorPanel";
 import { MotionPanel, ShapePanel, TypePanel } from "@/components/ThemePanel";
 import { ThemeContext, ensureFontLoaded, ensureLangFontLoaded } from "@/lib/theme";
-import { BottomSheet, MobileActionBar, MobileInspector, MobileLang, MobileSettings } from "@/components/Mobile";
+import { BottomSheet, MobileActionBar, MobileInspector, MobileLang, MobileSettings, MobileBottomNav, MobileFramesStrip, MobilePartsSheet, MobileLayersSheet, MobileThemeSheet, MobilePromptSheet } from "@/components/Mobile";
 import { ConfirmDialog, IconBtn, Segmented } from "@/components/ui";
 import { Lang, LangContext, SEED_TEXT, getLang, setGlobalLang, t, translateDefaultFrameName, translateDefaultText } from "@/lib/i18n";
 
@@ -462,7 +462,7 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
     futureRef.current = futureRef.current.map((snap) => translateSnapshot(snap, next));
   };
   const [isMobile, setIsMobile] = useState(false);
-  const [sheet, setSheet] = useState<"edit" | "settings" | "lang" | null>(null);
+  const [sheet, setSheet] = useState<"edit" | "settings" | "lang" | "parts" | "layers" | "theme" | "prompt" | "frames" | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   /** frame being rendered offscreen for the PNG export */
   const [exportFrame, setExportFrame] = useState<Frame | null>(null);
@@ -2841,6 +2841,43 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
     setSheet(null);
   };
 
+  const addKind = (kind: Kind) => {
+    const r = canvasRect();
+    const v = viewRef.current;
+    const item = makeItem(kind);
+    const sz = sizeOf(item, widthsRef.current);
+    const f = framesRef.current.find(ff => ff.id === selectedFrameId) ?? framesRef.current[0];
+    let x = ((r?.width ?? 0) / 2 - v.x) / v.z - sz.w / 2;
+    let y = ((r?.height ?? 0) / 2 - v.y) / v.z - sz.h / 2;
+    if (f) {
+      const { w, h } = frameSizeOf(f);
+      const lx = f.x + Math.min(FRAME_MARGIN, (w - sz.w) / 2);
+      const ly = f.y + Math.min(FRAME_MARGIN, (h - sz.h) / 2);
+      x = clamp(x, lx, Math.max(lx, f.x + w - FRAME_MARGIN - sz.w));
+      y = clamp(y, ly, Math.max(ly, f.y + h - FRAME_MARGIN - sz.h));
+      const taken = (yy: number) =>
+        itemRects().some((o) => o.l < x + sz.w && o.r > x && o.t < yy + sz.h && o.b > yy);
+      let tries = 0;
+      while (taken(y) && y + sz.h * 2 < f.y + h && tries++ < 12) y += sz.h + 12;
+    }
+    snapshot();
+    setGroups((gs) => [
+      ...gs,
+      {
+        id: uid(),
+        x: Math.round(x),
+        y: Math.round(y),
+        axis: "x",
+        items: [item],
+      },
+    ]);
+    setSelectedIds([item.id]);
+    setSelectedFrameId(null);
+    setSheet(null);
+    showToast(`Added ${kind}`, 1200, "add");
+  };
+
+
   const changeFrame = (f: FrameMode) => {
     if (f === frame) return;
     snapshot();
@@ -4537,21 +4574,21 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
             }}
           />
 
-          {/* MOBILE UNLOCK: Toggle between mobile-simple and desktop-full */}
-          <div style={{ position: "absolute", left: isMobile ? 14 : 22, top: isMobile ? undefined : 22, bottom: isMobile ? 84 : undefined, zIndex: 45, pointerEvents: "none" }}>
+          {/* MOBILE UNLOCK: Toggle + Full Mobile UI */}
+          <div style={{ position: "absolute", left: isMobile ? 12 : 22, top: isMobile ? 12 : 22, bottom: isMobile ? undefined : undefined, zIndex: 45, pointerEvents: "none" }}>
             <div style={{ pointerEvents: "auto", display: "flex", gap: 8, alignItems: "center" }}>
               <button
                 onClick={toggleMobileMode}
                 title={isMobile ? "Switch to full desktop editor" : "Switch to simple mobile editor"}
                 className="m3-press"
                 style={{
-                  height: 44,
-                  padding: "0 16px 0 12px",
-                  borderRadius: 22,
+                  height: isMobile ? 36 : 44,
+                  padding: "0 14px 0 10px",
+                  borderRadius: 18,
                   border: "none",
-                  background: isMobile ? p.primary : p.secondaryContainer,
-                  color: isMobile ? p.onPrimary : p.onSecondaryContainer,
-                  fontSize: 13,
+                  background: isMobile ? p.surface : p.secondaryContainer,
+                  color: isMobile ? p.onSurface : p.onSecondaryContainer,
+                  fontSize: 12,
                   fontWeight: 700,
                   cursor: "pointer",
                   display: "inline-flex",
@@ -4560,61 +4597,19 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
                   boxShadow: "0 2px 10px rgba(0,0,0,0.12)",
                 }}
               >
-                <span style={{ fontSize: 18 }}>{isMobile ? "💻" : "📱"}</span>
-                {isMobile ? "Full Editor" : "Mobile"}
+                <span style={{ fontSize: 16 }}>{isMobile ? "💻" : "📱"}</span>
+                {isMobile ? "Desktop" : "Mobile Full"}
               </button>
               {!isMobile && (
                 <div style={{ height: 36, padding: "0 12px", borderRadius: 18, background: p.surfaceContainerHigh, color: p.onSurfaceVariant, fontSize: 11, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  ✨ Mobile Unlocked
+                  ✨ Mobile Full
                 </div>
               )}
             </div>
           </div>
 
-          {isMobile && (
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                top: 80,
-                textAlign: "center",
-                fontSize: 11,
-                lineHeight: 1.4,
-                color: p.onSurfaceVariant,
-                pointerEvents: "none",
-                zIndex: 40,
-              }}
-            >
-              {t("mobileNote", lang)}
-            </div>
-          )}
-
-          {isMobile && sheet === null && (
-            <button
-              onClick={addButton}
-              title={t("addButton", lang)}
-              aria-label={t("addButton", lang)}
-              className="m3-press"
-              style={{
-                position: "absolute",
-                right: 16,
-                bottom: "calc(16px + var(--bottom-ui, 0px) + env(safe-area-inset-bottom))",
-                width: 64,
-                height: 64,
-                borderRadius: 20,
-                border: "none",
-                background: p.primary,
-                color: p.onPrimary,
-                cursor: "pointer",
-                display: "grid",
-                placeItems: "center",
-                zIndex: 46,
-                boxShadow: "0 6px 18px rgba(0,0,0,0.18)",
-              }}
-            >
-              <Icon name="add" size={32} />
-            </button>
+          {isMobile && frames.length > 1 && sheet === null && (
+            <MobileFramesStrip p={p} frames={frames} selectedId={selectedFrameId} onSelect={(id) => setSelectedFrameId(id)} onAdd={addFrame} />
           )}
 
           {isMobile && selected && sheet === null && (
@@ -4626,9 +4621,18 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
             />
           )}
 
+          {isMobile && (
+            <MobileBottomNav
+              p={p}
+              active={sheet}
+              onChange={(s) => setSheet(s === sheet ? null : s)}
+              onAdd={() => setSheet(sheet === "parts" ? null : "parts")}
+            />
+          )}
+
           <AnimatePresence>
             {isMobile && sheet === "edit" && selected && (
-              <BottomSheet key="edit" p={p} onClose={() => setSheet(null)}>
+              <BottomSheet key="edit" p={p} onClose={() => setSheet(null)} maxHeight="78%">
                 <MobileInspector
                   item={selected}
                   palette={p}
@@ -4643,7 +4647,7 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
               </BottomSheet>
             )}
             {isMobile && sheet === "settings" && (
-              <BottomSheet key="settings" p={p} onClose={() => setSheet(null)}>
+              <BottomSheet key="settings" p={p} onClose={() => setSheet(null)} maxHeight="85%">
                 <MobileSettings palette={p} paletteKey={paletteKey} onPalette={setPaletteKey} theme={theme} onTheme={patchTheme} />
               </BottomSheet>
             )}
@@ -4657,6 +4661,63 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
                     setSheet(null);
                   }}
                 />
+              </BottomSheet>
+            )}
+            {isMobile && sheet === "parts" && (
+              <BottomSheet key="parts" p={p} onClose={() => setSheet(null)} maxHeight="88%">
+                <MobilePartsSheet p={p} onAdd={(k) => { addKind(k); setSheet(null); }} onClose={() => setSheet(null)} />
+              </BottomSheet>
+            )}
+            {isMobile && sheet === "layers" && (
+              <BottomSheet key="layers" p={p} onClose={() => setSheet(null)} maxHeight="82%">
+                <MobileLayersSheet p={p} onClose={() => setSheet(null)}>
+                  <LayersPanel
+                    p={p}
+                    frames={frames}
+                    frameId={layersFrame?.id ?? null}
+                    onFrame={(id) => {
+                      setLayersFrameId(id);
+                      setSelectedIds([]);
+                      setSelectedFrameId(id);
+                      const f = framesRef.current.find((x) => x.id === id);
+                      if (f) glideToFrame(f);
+                    }}
+                    groups={layerGroups}
+                    widths={widths}
+                    selectedIds={selectedIds}
+                    onSelect={(ids, add) => {
+                      setSelectedIds((cur) => (add ? [...cur.filter((x) => !ids.includes(x)), ...ids] : ids));
+                      setSelectedFrameId(null);
+                      setSelectedLinkId(null);
+                    }}
+                    onReorder={reorderLayers}
+                    onToggleLock={toggleGroupLock}
+                    onReorderItems={reorderGroupItems}
+                    onDragging={onLayerDragging}
+                  />
+                </MobileLayersSheet>
+              </BottomSheet>
+            )}
+            {isMobile && sheet === "theme" && (
+              <BottomSheet key="theme" p={p} onClose={() => setSheet(null)} maxHeight="88%">
+                <MobileThemeSheet p={p} paletteKey={paletteKey} onPalette={setPaletteKey} theme={theme} onTheme={patchTheme} onClose={() => setSheet(null)} />
+              </BottomSheet>
+            )}
+            {isMobile && sheet === "prompt" && (
+              <BottomSheet key="prompt" p={p} onClose={() => setSheet(null)} maxHeight="82%">
+                <MobilePromptSheet p={p} onClose={() => setSheet(null)}>
+                  <PromptPanel
+                    doc={doc}
+                    widths={widths}
+                    palette={p}
+                    onDoc={(patch) => {
+                      if (patch.promptEdit !== undefined) setPromptEdit(patch.promptEdit);
+                      if (patch.promptOptions !== undefined) setPromptOptions(patch.promptOptions);
+                      if (patch.title !== undefined) setTitle(patch.title);
+                      if (patch.brief !== undefined) setBrief(patch.brief);
+                    }}
+                  />
+                </MobilePromptSheet>
               </BottomSheet>
             )}
           </AnimatePresence>
