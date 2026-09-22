@@ -20,12 +20,9 @@
   <img alt="No backend" src="https://img.shields.io/badge/backend-none%20(localStorage)-2E6A45" />
 </p>
 
-<p align="center">
-  <a href="https://trendshift.io/repositories/208608"><img alt="Trendshift: #1 repository of the day" src="https://trendshift.io/api/badge/trendshift/repositories/208608/daily" width="250" height="55" /></a>
-</p>
 
 <p align="center">
-  <a href="#日本語">日本語</a> · <a href="#中文">中文</a> · <a href="#한국어">한국어</a> · <a href="https://lnkiai.github.io/m3e-canvas/">Open the app</a>
+  <a href="#日本語">日本語</a> · <a href="#中文">中文</a> · <a href="#한국어">한국어</a> · <a href="https://lnkiai.github.io/m3e-canvas/">Open orginal app</a>
 </p>
 
 ![Sketching a recipes app in M3E Canvas, changing its theme, copying the prompt, an AI coding tool building it, and the app running on Android](docs/story.gif)
@@ -33,6 +30,20 @@
 <p align="center"><sub>Sketch a recipes app, retheme it, copy the prompt, hand it to an AI coding tool, and run the result on Android. (<a href="docs/story.mp4">mp4</a>)</sub></p>
 
 Works with any AI coding tool that takes a prompt, such as Claude Code, Codex, Gemini CLI or Cursor: copy the prompt, paste it into the tool, and ask for the app.
+
+## 📱 Mobile Unlocked Fork
+
+> This fork removes the phone restriction. Original version limits phones to "one screen, buttons only". This fork gives you the FULL desktop editor on mobile.
+
+**Changes:**
+- Default is always desktop mode, even on phones
+- Added toggle button 💻/📱 in toolbar to switch modes (saved in localStorage `m3e:forceMobile`)
+- Supports URL overrides: `?forceDesktop=1` or `?forceMobile=1`
+- All features work on phone: multi-screens, all parts, links, themes, prompt, AI helper
+
+**Why?** Good tools shouldn't be limited just because you have a phone.
+
+---
 
 ## What it does
 
