@@ -530,7 +530,7 @@ export function MobileActionBar({
       style={{
         position: "absolute",
         left: 14,
-        bottom: "calc(16px + var(--bottom-ui, 0px) + env(safe-area-inset-bottom))",
+        bottom: "calc(88px + var(--bottom-ui, 0px) + env(safe-area-inset-bottom))",
         display: "flex",
         gap: 4,
         padding: 6,
@@ -647,11 +647,11 @@ export function MobileBottomNav({ p, active, onChange, onAdd }: { p: Palette; ac
   );
 }
 
-export function MobileFramesStrip({ p, frames, selectedId, onSelect, onAdd }: { p: Palette; frames: Frame[]; selectedId: string | null; onSelect: (id: string) => void; onAdd: () => void }) {
+export function MobileFramesStrip({ p, frames, selectedId, onSelect, onAdd, onManage }: { p: Palette; frames: Frame[]; selectedId: string | null; onSelect: (id: string) => void; onAdd: () => void; onManage: () => void }) {
   const lang = useLang();
   return (
     <div style={{ position: "absolute", left: 0, right: 0, top: 64, zIndex: 39, pointerEvents: "none" }}>
-      <div className="no-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", padding: "8px 12px", pointerEvents: "auto" }}>
+      <div className="no-scrollbar" style={{ display: "flex", gap: 8, overflowX: "auto", padding: "8px 12px", pointerEvents: "auto", alignItems: "center" }}>
         {frames.map((f) => {
           const on = f.id === selectedId;
           const sz = frameSizeOf(f);
@@ -702,6 +702,28 @@ export function MobileFramesStrip({ p, frames, selectedId, onSelect, onAdd }: { 
         >
           <Icon name="add" size={16} /> {t("addFrame", lang)}
         </button>
+        {frames.length > 1 && (
+          <button
+            onClick={onManage}
+            className="m3-press"
+            style={{
+              flex: "0 0 auto",
+              height: 36,
+              padding: "0 12px",
+              borderRadius: 18,
+              border: `1px solid ${p.outlineVariant}`,
+              background: p.surface,
+              color: p.onSurfaceVariant,
+              fontSize: 12,
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            <Icon name="settings" size={16} /> Manage
+          </button>
+        )}
       </div>
     </div>
   );
@@ -924,3 +946,39 @@ export function MobilePromptSheet({ p, children, onClose }: { p: Palette; childr
   );
 }
 
+
+export function MobileFramesSheet({ p, frames, selectedId, onSelect, onDelete, onDuplicate, onAdd, onClose }: { p: Palette; frames: Frame[]; selectedId: string | null; onSelect: (id: string) => void; onDelete: (id: string) => void; onDuplicate: (id: string) => void; onAdd: () => void; onClose: () => void }) {
+  const lang = useLang();
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 20, background: p.primaryContainer, color: p.onPrimaryContainer, display: "grid", placeItems: "center" }}>
+          <Icon name="view_carousel" size={22} />
+        </div>
+        <span style={{ fontSize: 18, fontWeight: 800, color: p.onSurface, flex: 1 }}>{t("screens", lang) ?? "Screens"}</span>
+        <IconBtn icon="add" p={p} size={40} onClick={onAdd} title={t("addFrame", lang)} />
+        <IconBtn icon="close" p={p} size={40} onClick={onClose} />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {frames.map((f) => {
+          const on = f.id === selectedId;
+          const sz = frameSizeOf(f);
+          return (
+            <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: 10, borderRadius: 16, background: on ? p.secondaryContainer : p.surfaceContainerHigh, border: on ? `2px solid ${p.primary}` : `1px solid ${p.outlineVariant}` }}>
+              <button onClick={() => onSelect(f.id)} className="m3-press" style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}>
+                <Icon name={sz.w > 500 ? "desktop_windows" : "smartphone"} size={20} />
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: on ? p.onSecondaryContainer : p.onSurface }}>{f.name}</span>
+                  <span style={{ fontSize: 11, color: p.onSurfaceVariant }}>{sz.w}×{sz.h}</span>
+                </div>
+                {on && <Icon name="check" size={18} />}
+              </button>
+              <IconBtn icon="content_copy" p={p} size={40} onClick={() => onDuplicate(f.id)} title={t("duplicate", lang)} />
+              <IconBtn icon="delete" p={p} size={40} danger onClick={() => onDelete(f.id)} title={t("delete", lang)} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { FrameMode, Palette, Place } from "@/lib/tokens";
 import { IconBtn, Segmented, TidyButton, TidyState } from "./ui";
@@ -137,7 +138,17 @@ export function Toolbar({
 }) {
   const lang = useLang();
   if (mobile) {
-    const S = 42;
+    const S = 44;
+    const [menuOpen, setMenuOpen] = React.useState(false);
+    const menuRef = React.useRef<HTMLDivElement | null>(null);
+    React.useEffect(() => {
+      if (!menuOpen) return;
+      const onDown = (e: PointerEvent) => {
+        if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+      };
+      window.addEventListener("pointerdown", onDown, true);
+      return () => window.removeEventListener("pointerdown", onDown, true);
+    }, [menuOpen]);
     return (
       <div
         style={{
@@ -155,32 +166,31 @@ export function Toolbar({
         <Pill p={p}>
           <IconBtn icon="undo" p={p} onClick={onUndo} disabled={!canUndo} title={t("undo", lang)} size={S} />
           <IconBtn icon="redo" p={p} onClick={onRedo} disabled={!canRedo} title={t("redo", lang)} size={S} />
-          <IconBtn icon="translate" p={p} onClick={onLangSheet} title={t("language", lang)} size={S} />
-          <IconBtn icon="palette" p={p} onClick={onSettings} title={t("settings", lang)} size={S} />
-          <GitHubLink p={p} size={S} />
-          <button
-            onClick={onPrompt}
-            title={t("copyPrompt", lang)}
-            className="m3-press"
-            style={{
-              height: S,
-              padding: "0 14px 0 10px",
-              borderRadius: S / 2,
-              border: "none",
-              background: p.primary,
-              color: p.onPrimary,
-              fontSize: 14,
-              fontWeight: 700,
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              whiteSpace: "nowrap",
-            }}
-          >
-            <Icon name="auto_awesome" size={22} />
-            {t("prompt", lang)}
-          </button>
+          <div style={{ width: 1, height: 24, background: p.outlineVariant, margin: "0 2px" }} />
+          <IconBtn icon="play_arrow" p={p} onClick={onPreview} title={t("preview", lang)} size={S} fill />
+          <div style={{ position: "relative" }} ref={menuRef}>
+            <IconBtn icon="more_vert" p={p} on={menuOpen} onClick={() => setMenuOpen((o) => !o)} title="More" size={S} hasPopup="menu" expanded={menuOpen} />
+            {menuOpen && (
+              <div style={{ position: "absolute", top: 50, right: 0, minWidth: 220, padding: 6, borderRadius: 16, background: p.surfaceContainerHigh, boxShadow: "0 8px 24px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", gap: 4, zIndex: 50 }}>
+                <button onClick={() => { setMenuOpen(false); onLangSheet?.(); }} className="m3-press" style={{ height: 48, borderRadius: 12, border: "none", background: "transparent", color: p.onSurface, display: "flex", alignItems: "center", gap: 12, padding: "0 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
+                  <Icon name="translate" size={20} /> {t("language", lang)}
+                </button>
+                <button onClick={() => { setMenuOpen(false); onSettings?.(); }} className="m3-press" style={{ height: 48, borderRadius: 12, border: "none", background: "transparent", color: p.onSurface, display: "flex", alignItems: "center", gap: 12, padding: "0 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
+                  <Icon name="palette" size={20} /> {t("settings", lang)}
+                </button>
+                <button onClick={() => { setMenuOpen(false); onPrompt?.(); }} className="m3-press" style={{ height: 48, borderRadius: 12, border: "none", background: "transparent", color: p.onSurface, display: "flex", alignItems: "center", gap: 12, padding: "0 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
+                  <Icon name="content_copy" size={20} /> {t("copyPrompt", lang)}
+                </button>
+                <div style={{ height: 1, background: p.outlineVariant, margin: "4px 0" }} />
+                <button onClick={() => { setMenuOpen(false); onClear(); }} className="m3-press" style={{ height: 48, borderRadius: 12, border: "none", background: "transparent", color: p.error, display: "flex", alignItems: "center", gap: 12, padding: "0 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
+                  <Icon name="delete_sweep" size={20} /> {t("clearAll", lang)}
+                </button>
+                <a href="https://github.com/lnkiai/m3e-canvas" target="_blank" rel="noreferrer" style={{ height: 48, borderRadius: 12, background: "transparent", color: p.onSurfaceVariant, display: "flex", alignItems: "center", gap: 12, padding: "0 12px", fontSize: 14, fontWeight: 600, textDecoration: "none" }}>
+                  <Icon name="code" size={20} /> GitHub
+                </a>
+              </div>
+            )}
+          </div>
         </Pill>
       </div>
     );
