@@ -21,6 +21,21 @@
 </p>
 
 
+
+## 📱 Mobile Unlocked Fork
+
+> This fork removes the phone restriction. Original version limits phones to "one screen, buttons only". This fork gives you the FULL desktop editor on mobile.
+
+**Changes:**
+- Default is always desktop mode, even on phones
+- Added toggle button 💻/📱 in toolbar to switch modes (saved in localStorage `m3e:forceMobile`)
+- Supports URL overrides: `?forceDesktop=1` or `?forceMobile=1`
+- All features work on phone: multi-screens, all parts, links, themes, prompt, AI helper
+
+**Why?** Good tools shouldn't be limited just because you have a phone.
+
+---
+
 <p align="center">
   <a href="#日本語">日本語</a> · <a href="#中文">中文</a> · <a href="#한국어">한국어</a> · <a href="https://lnkiai.github.io/m3e-canvas/">Open orginal app</a>
 </p>
