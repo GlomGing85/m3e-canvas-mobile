@@ -126,6 +126,7 @@ import { AiSettings, DEFAULT_AI, hasKey, isSecureUrl, loadAiSettings, proposeBeh
 import { barSlotOf, bodyRect, carryFrame, pullInto, tidyFrame } from "@/lib/tidy";
 import { constrainModalRails, modalRailOf, updateRail } from "@/lib/rail";
 import { isProject, readProject, saveProject } from "@/lib/project";
+import { getCurrentProjectId, listProjects, removeProject, renameStoredProject, SavedProject, setCurrentProjectId, upsertProject } from "@/lib/projects";
 import { hasShareHash, readShareHash } from "@/lib/share";
 import { LoadingIndicator } from "@/components/Loading";
 import { draftDesign } from "@/lib/ai";
@@ -133,7 +134,7 @@ import { ShareDialog } from "@/components/ShareMenu";
 import { ColorPanel } from "@/components/ColorPanel";
 import { MotionPanel, ShapePanel, TypePanel } from "@/components/ThemePanel";
 import { ThemeContext, ensureFontLoaded, ensureLangFontLoaded } from "@/lib/theme";
-import { BottomSheet, MobileActionBar, MobileInspector, MobileLang, MobileSettings, MobileBottomNav, MobileFramesStrip, MobilePartsSheet, MobileLayersSheet, MobileThemeSheet, MobilePromptSheet, MobileFramesSheet } from "@/components/Mobile";
+import { BottomSheet, MobileActionBar, MobileInspector, MobileLang, MobileSettings, MobileBottomNav, MobileFramesStrip, MobilePartsSheet, MobileLayersSheet, MobileThemeSheet, MobilePromptSheet, MobileFramesSheet, MobilePromptPanel, MobileProjectsSheet } from "@/components/Mobile";
 import { ConfirmDialog, IconBtn, Segmented } from "@/components/ui";
 import { Lang, LangContext, SEED_TEXT, getLang, setGlobalLang, t, translateDefaultFrameName, translateDefaultText } from "@/lib/i18n";
 
@@ -462,7 +463,11 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
     futureRef.current = futureRef.current.map((snap) => translateSnapshot(snap, next));
   };
   const [isMobile, setIsMobile] = useState(false);
-  const [sheet, setSheet] = useState<"edit" | "settings" | "lang" | "parts" | "layers" | "theme" | "prompt" | "frames" | null>(null);
+  const [sheet, setSheet] = useState<"edit" | "settings" | "lang" | "parts" | "layers" | "theme" | "prompt" | "frames" | "projects" | null>(null);
+  /* the project being edited and the shelf of everything saved */
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   /** frame being rendered offscreen for the PNG export */
   const [exportFrame, setExportFrame] = useState<Frame | null>(null);
@@ -767,6 +772,13 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
         setFrames([{ ...SEED_FRAMES[0], name: t("home", initialLang) }]);
       }
     } catch {}
+    /* sit inside a project from the first frame; the autosave below writes it */
+    let bootProjectId = getCurrentProjectId();
+    if (!bootProjectId) {
+      bootProjectId = uid();
+      setCurrentProjectId(bootProjectId);
+    }
+    setProjectId(bootProjectId);
     setAiSettings(loadAiSettings());
     loadedRef.current = true;
     /* the document is in state; one frame later it is on screen and the boot overlay may go.
@@ -902,6 +914,87 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
       );
     } catch {}
   }, [editAccess, groups, frames, paletteKey, frame, title, brief, promptEdit, promptOptions, platform, customPalette, dynamicColor, theme]);
+
+  /* the projects shelf: the whole document mirrored into its record on every
+   * change, so tapping another project never loses a stroke */
+  useEffect(() => {
+    if (!loadedRef.current || editAccess !== "editable" || !projectId) return;
+    upsertProject({
+      id: projectId,
+      name: title.trim() || t("untitled", lang),
+      updatedAt: Date.now(),
+      doc: { groups, frames, paletteKey, frame, title, brief, promptEdit, promptOptions, platform: platform ?? undefined, customPalette: customPalette ?? undefined, dynamicColor, theme },
+    });
+    /* live rows while the switcher is open: names and dates follow the mirror */
+    if (sheet === "projects") setSavedProjects(listProjects());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, editAccess, sheet, groups, frames, paletteKey, frame, title, brief, promptEdit, promptOptions, platform, customPalette, dynamicColor, theme]);
+
+  const refreshProjects = () => setSavedProjects(listProjects());
+
+  /* another project's document takes the stage; the one being left stays one
+   * undo away, the same courtesy a file import gives */
+  const openProjectById = (id: string) => {
+    if (id === projectId) {
+      setSheet(null);
+      return;
+    }
+    const next = listProjects().find((x) => x.id === id);
+    if (!next) {
+      refreshProjects();
+      return;
+    }
+    hadDocRef.current = true;
+    snapshot(true);
+    setDraftBefore(null);
+    setQuickUndo(false);
+    try {
+      localStorage.removeItem(BEFORE_KEY);
+    } catch {}
+    applyDoc(next.doc, false);
+    setProjectId(id);
+    setCurrentProjectId(id);
+    setSelectedIds([]);
+    setSelectedFrameId(null);
+    setSelectedLinkId(null);
+    setWidths({});
+    lastPatchRef.current = { key: "", at: 0 };
+    setSheet(null);
+    queueMicrotask(() => fitRef.current());
+    showToast(next.name, 1600, "folder_open");
+  };
+
+  /* a clean slate: fresh seed parts on one home screen, everything else back
+   * to defaults */
+  const createProject = () => {
+    hadDocRef.current = true;
+    snapshot(true);
+    setDraftBefore(null);
+    setQuickUndo(false);
+    applyDoc({ groups: seed(lang), frames: [{ id: uid(), name: t("home", lang), x: 0, y: 0 }] }, true);
+    const id = uid();
+    setProjectId(id);
+    setCurrentProjectId(id);
+    setSelectedIds([]);
+    setSelectedFrameId(null);
+    setSelectedLinkId(null);
+    setWidths({});
+    lastPatchRef.current = { key: "", at: 0 };
+    setSheet(null);
+    queueMicrotask(() => fitRef.current());
+    showToast(t("newProject", lang), 1600, "note_add");
+  };
+
+  const deleteProjectById = (id: string) => {
+    removeProject(id);
+    if (id === projectId) {
+      const rest = listProjects();
+      if (rest.length) openProjectById(rest[0].id);
+      else createProject();
+      return;
+    }
+    refreshProjects();
+  };
 
   useEffect(() => {
     if (!loadedRef.current) return;
@@ -4566,6 +4659,7 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
             mobile={isMobile}
             onSettings={() => setSheet(sheet === "settings" ? null : "settings")}
             onLangSheet={() => setSheet(sheet === "lang" ? null : "lang")}
+            onProjects={() => setSheet(sheet === "projects" ? null : "projects")}
             onPrompt={async () => {
               try {
                 await navigator.clipboard.writeText(effectivePrompt(doc, widths, lang));
@@ -4701,21 +4795,43 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
               </BottomSheet>
             )}
             {isMobile && sheet === "prompt" && (
-              <BottomSheet key="prompt" p={p} onClose={() => setSheet(null)} maxHeight="85%">
-                <MobilePromptSheet p={p} onClose={() => setSheet(null)}>
-                  <PromptPanel
+              <BottomSheet key="prompt" p={p} onClose={() => setSheet(null)} maxHeight="88%">
+                <div style={{ maxHeight: "76vh", overflowY: "auto", padding: "0 2px" }} className="no-scrollbar">
+                  <MobilePromptPanel
                     doc={doc}
                     widths={widths}
-                    palette={p}
+                    p={p}
+                    onClose={() => setSheet(null)}
                     onDoc={(patch) => {
                       if (patch.title !== undefined) setTitle(patch.title);
                       if (patch.brief !== undefined) setBrief(patch.brief);
-                      if ("promptEdit" in patch) setPromptEdit(patch.promptEdit as any);
-                      if ("promptOptions" in patch) setPromptOptions(patch.promptOptions as any);
-                      if ("platform" in patch) setPlatform(patch.platform as any);
+                      if ("promptEdit" in patch) setPromptEdit(patch.promptEdit);
+                      if ("promptOptions" in patch) setPromptOptions(patch.promptOptions);
+                      if ("platform" in patch) setPlatform(isPlatform(patch.platform) ? patch.platform : null);
                     }}
                   />
-                </MobilePromptSheet>
+                </div>
+              </BottomSheet>
+            )}
+            {isMobile && sheet === "projects" && (
+              <BottomSheet key="projects" p={p} onClose={() => setSheet(null)} maxHeight="85%">
+                <div style={{ maxHeight: "76vh", overflowY: "auto", padding: "0 2px" }} className="no-scrollbar">
+                  <MobileProjectsSheet
+                    p={p}
+                    projects={savedProjects}
+                    currentId={projectId}
+                    onOpen={openProjectById}
+                    onNew={createProject}
+                    onRename={(id, name) => {
+                      renameStoredProject(id, name);
+                      refreshProjects();
+                    }}
+                    onDelete={(id) => setProjectToDelete(id)}
+                    onDownload={() => saveProject(doc)}
+                    onImport={() => projectFileRef.current?.click()}
+                    onClose={() => setSheet(null)}
+                  />
+                </div>
               </BottomSheet>
             )}
             {isMobile && sheet === "frames" && (
@@ -4728,6 +4844,7 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
                   onDelete={(id) => { if (frames.length > 1) { deleteFrame(id); } else { showToast("Need at least 1 screen", 2000, "error"); } }}
                   onDuplicate={(id) => { duplicateFrame(id); showToast("Duplicated", 1200, "check"); }}
                   onAdd={() => { addFrame(); setSheet(null); }}
+                  onRename={(id, name) => patchFrame(id, { name })}
                   onClose={() => setSheet(null)}
                 />
               </BottomSheet>
@@ -4951,6 +5068,19 @@ export default function Editor({ initialLang, onReady }: { initialLang: Lang; on
           }}
         />
 
+
+        <ConfirmDialog
+          open={projectToDelete !== null}
+          icon="folder_delete"
+          title={t("deleteProjectTitle", lang)}
+          body={t("deleteProjectBody", lang)}
+          p={p}
+          onCancel={() => setProjectToDelete(null)}
+          onConfirm={() => {
+            if (projectToDelete) deleteProjectById(projectToDelete);
+            setProjectToDelete(null);
+          }}
+        />
 
         <ConfirmDialog
           open={confirmClear}

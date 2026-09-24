@@ -483,6 +483,15 @@ export const UI = {
     en: "Could not connect. Check the URL, the network and the server's CORS settings",
     zh: "无法连接。请检查 URL、网络和服务器的 CORS 设置",
   },
+  projects: { ja: "プロジェクト", en: "Projects", zh: "项目" },
+  newProject: { ja: "新規プロジェクト", en: "New project", zh: "新建项目" },
+  rename: { ja: "名前を変更", en: "Rename", zh: "重命名" },
+  untitled: { ja: "無題", en: "Untitled", zh: "未命名" },
+  saveToFile: { ja: "ファイルに保存", en: "Save to file", zh: "保存到文件" },
+  openFromFile: { ja: "ファイルを開く", en: "Open file", zh: "打开文件" },
+  promptEdited: { ja: "編集済み", en: "Edited", zh: "已编辑" },
+  deleteProjectTitle: { ja: "プロジェクトを削除しますか？", en: "Delete this project?", zh: "删除此项目？" },
+  deleteProjectBody: { ja: "削除したプロジェクトは元に戻せません", en: "A deleted project can't be brought back", zh: "删除的项目无法恢复" },
 } as const satisfies Record<string, Str>;
 
 export type UIKey = keyof typeof UI;
@@ -563,6 +572,9 @@ export const KO: Record<UIKey, string> = {
   aiSelectScreen: "먼저 화면을 선택하세요", aiNoKey: "AI 탭에 키를 입력하면 사용할 수 있습니다", aiError: "AI 요청에 실패했습니다",
   aiErrorRefusal: "모델이 답변을 거부했습니다", aiErrorJson: "모델의 응답을 읽을 수 없습니다", aiErrorLong: "답변이 너무 길어 중간에 잘렸습니다. 화면 수를 줄여 다시 시도하세요", aiErrorModel: "모델 ID를 입력하세요",
   aiErrorInsecure: "기본 URL은 https를 사용하거나 localhost를 가리켜야 합니다", aiErrorNetwork: "연결할 수 없습니다. URL, 네트워크 및 서버의 CORS 설정을 확인하세요",
+  projects: "프로젝트", newProject: "새 프로젝트", rename: "이름 바꾸기", untitled: "제목 없음",
+  saveToFile: "파일로 저장", openFromFile: "파일 열기", promptEdited: "편집됨",
+  deleteProjectTitle: "이 프로젝트를 삭제할까요?", deleteProjectBody: "삭제한 프로젝트는 되돌릴 수 없습니다",
 };
 
 /** the locale each language writes its dates in */

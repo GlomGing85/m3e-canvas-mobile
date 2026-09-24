@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, useDragControls } from "motion/react";
-import { CONTRASTS, Contrast, FONTS, Item, Kind, KIND_ORDER, KIND_SPEC, NavTab, PALETTES, Palette, SHAPES, ShapeScale, Theme, defaultTabsFor, iconSlotsOf, setIconSlot, Frame, frameSizeOf } from "@/lib/tokens";
+import { CONTRASTS, Contrast, Doc, FONTS, Item, Kind, KIND_ORDER, KIND_SPEC, NavTab, PALETTES, Palette, Platform, SHAPES, ShapeScale, Theme, defaultTabsFor, defaultPlatformOf, iconSlotsOf, setIconSlot, Frame, frameSizeOf } from "@/lib/tokens";
+import { buildPrompt } from "@/lib/prompt";
 import { ensureFontLoaded } from "@/lib/theme";
 import { KIND_TEXT, LANGS, Lang, t, useLang } from "@/lib/i18n";
 import { IconPicker } from "./IconPicker";
@@ -569,7 +570,7 @@ export function MobileActionBar({
 
 /* ========== NEW: FULL MOBILE EXPERIENCE ========== */
 
-export type MobileSheet = "edit" | "settings" | "lang" | "parts" | "layers" | "theme" | "prompt" | "frames" | null;
+export type MobileSheet = "edit" | "settings" | "lang" | "parts" | "layers" | "theme" | "prompt" | "frames" | "projects" | null;
 
 const PART_CATEGORIES: { id: string; label: string; icon: string; kinds: Kind[] }[] = [
   { id: "actions", label: "Actions", icon: "touch_app", kinds: ["button", "iconButton", "fab", "extendedFab", "splitButton", "chip"] },
@@ -947,8 +948,15 @@ export function MobilePromptSheet({ p, children, onClose }: { p: Palette; childr
 }
 
 
-export function MobileFramesSheet({ p, frames, selectedId, onSelect, onDelete, onDuplicate, onAdd, onClose }: { p: Palette; frames: Frame[]; selectedId: string | null; onSelect: (id: string) => void; onDelete: (id: string) => void; onDuplicate: (id: string) => void; onAdd: () => void; onClose: () => void }) {
+export function MobileFramesSheet({ p, frames, selectedId, onSelect, onDelete, onDuplicate, onAdd, onRename, onClose }: { p: Palette; frames: Frame[]; selectedId: string | null; onSelect: (id: string) => void; onDelete: (id: string) => void; onDuplicate: (id: string) => void; onAdd: () => void; onRename: (id: string, name: string) => void; onClose: () => void }) {
   const lang = useLang();
+  const [editId, setEditId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const commit = (f: Frame) => {
+    const name = draft.trim();
+    if (name && name !== f.name) onRename(f.id, name);
+    setEditId(null);
+  };
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -963,21 +971,217 @@ export function MobileFramesSheet({ p, frames, selectedId, onSelect, onDelete, o
         {frames.map((f) => {
           const on = f.id === selectedId;
           const sz = frameSizeOf(f);
+          const editing = editId === f.id;
           return (
             <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: 10, borderRadius: 16, background: on ? p.secondaryContainer : p.surfaceContainerHigh, border: on ? `2px solid ${p.primary}` : `1px solid ${p.outlineVariant}` }}>
-              <button onClick={() => onSelect(f.id)} className="m3-press" style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, border: "none", background: "transparent", cursor: "pointer", textAlign: "left" }}>
-                <Icon name={sz.w > 500 ? "desktop_windows" : "smartphone"} size={20} />
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: on ? p.onSecondaryContainer : p.onSurface }}>{f.name}</span>
-                  <span style={{ fontSize: 11, color: p.onSurfaceVariant }}>{sz.w}×{sz.h}</span>
-                </div>
-                {on && <Icon name="check" size={18} />}
-              </button>
-              <IconBtn icon="content_copy" p={p} size={40} onClick={() => onDuplicate(f.id)} title={t("duplicate", lang)} />
-              <IconBtn icon="delete" p={p} size={40} danger onClick={() => onDelete(f.id)} title={t("delete", lang)} />
+              {editing ? (
+                <>
+                  <input
+                    autoFocus
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commit(f);
+                      if (e.key === "Escape") setEditId(null);
+                    }}
+                    aria-label={t("rename", lang)}
+                    style={{ flex: 1, minWidth: 0, height: 44, borderRadius: 12, border: `1px solid ${p.primary}`, background: p.surface, color: p.onSurface, padding: "0 12px", fontSize: 14, fontWeight: 600, outline: "none", fontFamily: "inherit" }}
+                  />
+                  <IconBtn icon="check" p={p} size={40} onClick={() => commit(f)} title={t("ok", lang)} />
+                  <IconBtn icon="close" p={p} size={40} onClick={() => setEditId(null)} title={t("cancel", lang)} />
+                </>
+              ) : (
+                <>
+                  <button onClick={() => onSelect(f.id)} className="m3-press" style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, border: "none", background: "transparent", cursor: "pointer", textAlign: "left", minWidth: 0 }}>
+                    <Icon name={sz.w > 500 ? "desktop_windows" : "smartphone"} size={20} />
+                    <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: on ? p.onSecondaryContainer : p.onSurface, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
+                      <span style={{ fontSize: 11, color: p.onSurfaceVariant }}>{sz.w}×{sz.h}</span>
+                    </div>
+                    {on && <Icon name="check" size={18} />}
+                  </button>
+                  <IconBtn icon="edit" p={p} size={40} onClick={() => { setEditId(f.id); setDraft(f.name); }} title={t("rename", lang)} />
+                  <IconBtn icon="content_copy" p={p} size={40} onClick={() => onDuplicate(f.id)} title={t("duplicate", lang)} />
+                  <IconBtn icon="delete" p={p} size={40} danger onClick={() => onDelete(f.id)} title={t("delete", lang)} />
+                </>
+              )}
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+/** Phone layout of the prompt panel: target, name and brief on top, the prompt
+ *  itself in a big readable box with copy, edit and reset. The desktop panel's
+ *  full-screen cover animation doesn't fit a phone, so this one stays simple:
+ *  editing happens right in the box. */
+export function MobilePromptPanel({ doc, widths, p, onDoc, onClose }: { doc: Doc; widths: Record<string, number>; p: Palette; onDoc: (patch: Partial<Doc>) => void; onClose: () => void }) {
+  const lang = useLang();
+  const generated = useMemo(() => buildPrompt(doc, widths, undefined, lang), [doc, widths, lang]);
+  const edited = doc.promptEdit !== undefined;
+  const text = edited ? doc.promptEdit! : generated;
+  const [editing, setEditing] = useState(false);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const id = setTimeout(() => setCopied(false), 1400);
+    return () => clearTimeout(id);
+  }, [copied]);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+    } catch {}
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 20, background: p.primaryContainer, color: p.onPrimaryContainer, display: "grid", placeItems: "center" }}>
+          <Icon name="auto_awesome" size={22} />
+        </div>
+        <span style={{ fontSize: 18, fontWeight: 800, color: p.onSurface, flex: 1 }}>{t("prompt", lang)}</span>
+        <IconBtn icon="close" p={p} size={40} onClick={onClose} />
+      </div>
+      <Segmented<Platform>
+        options={[
+          { key: "android", icon: "android", label: "Android", title: t("targetAndroid", lang) },
+          { key: "web", icon: "language", label: "Web", title: t("targetWeb", lang) },
+        ]}
+        value={doc.platform ?? defaultPlatformOf(doc.frames, doc.frame)}
+        onChange={(platform) => onDoc({ platform })}
+        p={p}
+        height={44}
+      />
+      <Field value={doc.title} onChange={(title) => onDoc({ title })} placeholder={t("appName", lang)} p={p} icon="smartphone" />
+      <textarea
+        value={doc.brief}
+        onChange={(e) => onDoc({ brief: e.target.value })}
+        placeholder={t("brief", lang)}
+        rows={2}
+        style={{ width: "100%", resize: "none", border: `1px solid ${p.outlineVariant}`, borderRadius: 14, background: p.surface, color: p.onSurface, padding: "12px 14px", fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+      />
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {edited && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, height: 26, padding: "0 10px", borderRadius: 13, background: p.tertiaryContainer, color: p.onTertiaryContainer, fontSize: 11, fontWeight: 700 }}>
+            <Icon name="edit" size={14} /> {t("promptEdited", lang)}
+          </span>
+        )}
+        <span style={{ flex: 1 }} />
+        {edited && <IconBtn icon="restart_alt" p={p} size={40} onClick={() => onDoc({ promptEdit: undefined })} title={t("promptReset", lang)} />}
+        <IconBtn icon={editing ? "visibility" : "edit"} p={p} size={40} on={editing} onClick={() => setEditing((e) => !e)} title={editing ? t("preview", lang) : t("edit", lang)} />
+        <IconBtn icon={copied ? "check" : "content_copy"} p={p} size={40} onClick={() => void copy()} title={t("copyPrompt", lang)} />
+      </div>
+      <textarea
+        value={text}
+        readOnly={!editing}
+        onChange={(e) => onDoc({ promptEdit: e.target.value })}
+        spellCheck={false}
+        style={{ width: "100%", minHeight: 240, resize: "vertical", border: `1px solid ${editing ? p.primary : p.outlineVariant}`, borderRadius: 16, background: p.surfaceContainerHigh, color: p.onSurface, padding: 14, fontSize: 13, lineHeight: 1.55, fontFamily: "inherit", outline: "none", boxSizing: "border-box", whiteSpace: "pre-wrap" }}
+      />
+    </div>
+  );
+}
+
+export type ProjectRow = { id: string; name: string; updatedAt: number };
+
+/** The project switcher: everything the author has made, newest first. The
+ *  current document is saved continuously, so tapping another row just works. */
+export function MobileProjectsSheet({ p, projects, currentId, onOpen, onNew, onRename, onDelete, onDownload, onImport, onClose }: {
+  p: Palette;
+  projects: ProjectRow[];
+  currentId: string | null;
+  onOpen: (id: string) => void;
+  onNew: () => void;
+  onRename: (id: string, name: string) => void;
+  onDelete: (id: string) => void;
+  onDownload: () => void;
+  onImport: () => void;
+  onClose: () => void;
+}) {
+  const lang = useLang();
+  const [editId, setEditId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const commit = (row: ProjectRow) => {
+    const name = draft.trim();
+    if (name && name !== row.name) onRename(row.id, name);
+    setEditId(null);
+  };
+  const when = (at: number) => new Date(at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 20, background: p.primaryContainer, color: p.onPrimaryContainer, display: "grid", placeItems: "center" }}>
+          <Icon name="folder" size={22} />
+        </div>
+        <span style={{ fontSize: 18, fontWeight: 800, color: p.onSurface, flex: 1 }}>{t("projects", lang)}</span>
+        <IconBtn icon="close" p={p} size={40} onClick={onClose} />
+      </div>
+      <button
+        onClick={onNew}
+        className="m3-press"
+        style={{ height: 52, borderRadius: 26, border: "none", background: p.primary, color: p.onPrimary, fontSize: 15, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+      >
+        <Icon name="add" size={22} /> {t("newProject", lang)}
+      </button>
+      <div style={{ maxHeight: "42vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }} className="no-scrollbar">
+        {projects.map((row) => {
+          const on = row.id === currentId;
+          const editing = editId === row.id;
+          return (
+            <div key={row.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: 10, borderRadius: 16, background: on ? p.secondaryContainer : p.surfaceContainerHigh, border: on ? `2px solid ${p.primary}` : `1px solid ${p.outlineVariant}` }}>
+              {editing ? (
+                <>
+                  <input
+                    autoFocus
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commit(row);
+                      if (e.key === "Escape") setEditId(null);
+                    }}
+                    aria-label={t("rename", lang)}
+                    style={{ flex: 1, minWidth: 0, height: 44, borderRadius: 12, border: `1px solid ${p.primary}`, background: p.surface, color: p.onSurface, padding: "0 12px", fontSize: 14, fontWeight: 600, outline: "none", fontFamily: "inherit" }}
+                  />
+                  <IconBtn icon="check" p={p} size={40} onClick={() => commit(row)} title={t("ok", lang)} />
+                  <IconBtn icon="close" p={p} size={40} onClick={() => setEditId(null)} title={t("cancel", lang)} />
+                </>
+              ) : (
+                <>
+                  <button onClick={() => onOpen(row.id)} className="m3-press" style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, border: "none", background: "transparent", cursor: "pointer", textAlign: "left", minWidth: 0, color: "inherit" }}>
+                    <Icon name={on ? "folder_open" : "draft"} size={20} />
+                    <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: on ? p.onSecondaryContainer : p.onSurface, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.name}</span>
+                      <span style={{ fontSize: 11, color: p.onSurfaceVariant }}>{when(row.updatedAt)}</span>
+                    </div>
+                    {on && <Icon name="check" size={18} />}
+                  </button>
+                  <IconBtn icon="edit" p={p} size={40} onClick={() => { setEditId(row.id); setDraft(row.name); }} title={t("rename", lang)} />
+                  <IconBtn icon="delete" p={p} size={40} danger onClick={() => onDelete(row.id)} title={t("delete", lang)} />
+                </>
+              )}
+            </div>
+          );
+        })}
+        {projects.length === 0 && <div style={{ padding: 16, textAlign: "center", fontSize: 13, color: p.onSurfaceVariant }}>—</div>}
+      </div>
+      <div style={{ height: 1, background: p.outlineVariant }} />
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          onClick={onDownload}
+          className="m3-press"
+          style={{ flex: 1, height: 44, borderRadius: 22, border: `1px solid ${p.outlineVariant}`, background: "transparent", color: p.onSurface, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+        >
+          <Icon name="download" size={18} /> {t("saveToFile", lang)}
+        </button>
+        <button
+          onClick={onImport}
+          className="m3-press"
+          style={{ flex: 1, height: 44, borderRadius: 22, border: `1px solid ${p.outlineVariant}`, background: "transparent", color: p.onSurface, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+        >
+          <Icon name="file_open" size={18} /> {t("openFromFile", lang)}
+        </button>
       </div>
     </div>
   );

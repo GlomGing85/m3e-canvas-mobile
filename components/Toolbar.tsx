@@ -80,6 +80,7 @@ export function Toolbar({
   onPrompt,
   onSettings,
   onLangSheet,
+  onProjects,
   tidy,
   onTidy,
   place,
@@ -116,6 +117,8 @@ export function Toolbar({
   onSettings?: () => void;
   /** phone: open the language sheet instead of the menu */
   onLangSheet?: () => void;
+  /** phone: open the project switcher */
+  onProjects?: () => void;
   /** the tidy button for the screen being worked on; absent when no screen is in play */
   tidy?: TidyState;
   onTidy?: () => void;
@@ -137,19 +140,20 @@ export function Toolbar({
   quickUndo?: boolean;
 }) {
   const lang = useLang();
-  if (mobile) {
-    const S = 44;
-    const [menuOpen, setMenuOpen] = React.useState(false);
-    const menuRef = React.useRef<HTMLDivElement | null>(null);
-    React.useEffect(() => {
-      if (!menuOpen) return;
-      const onDown = (e: PointerEvent) => {
-        if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
-      };
-      window.addEventListener("pointerdown", onDown, true);
-      return () => window.removeEventListener("pointerdown", onDown, true);
-    }, [menuOpen]);
-    return (
+  /* phone: the overflow menu's open state; hoisted above every branch so the
+   * hook order never depends on which layout is drawn */
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const menuRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", onDown, true);
+    return () => window.removeEventListener("pointerdown", onDown, true);
+  }, [menuOpen]);
+  const S = 44;
+  if (mobile) return (
       <div
         style={{
           position: "absolute",
@@ -172,6 +176,9 @@ export function Toolbar({
             <IconBtn icon="more_vert" p={p} on={menuOpen} onClick={() => setMenuOpen((o) => !o)} title="More" size={S} hasPopup="menu" expanded={menuOpen} />
             {menuOpen && (
               <div style={{ position: "absolute", top: 50, right: 0, minWidth: 220, padding: 6, borderRadius: 16, background: p.surfaceContainerHigh, boxShadow: "0 8px 24px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", gap: 4, zIndex: 50 }}>
+                <button onClick={() => { setMenuOpen(false); onProjects?.(); }} className="m3-press" style={{ height: 48, borderRadius: 12, border: "none", background: "transparent", color: p.onSurface, display: "flex", alignItems: "center", gap: 12, padding: "0 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
+                  <Icon name="folder" size={20} /> {t("projects", lang)}
+                </button>
                 <button onClick={() => { setMenuOpen(false); onLangSheet?.(); }} className="m3-press" style={{ height: 48, borderRadius: 12, border: "none", background: "transparent", color: p.onSurface, display: "flex", alignItems: "center", gap: 12, padding: "0 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", textAlign: "left" }}>
                   <Icon name="translate" size={20} /> {t("language", lang)}
                 </button>
@@ -193,8 +200,7 @@ export function Toolbar({
           </div>
         </Pill>
       </div>
-    );
-  }
+  );
   return (
     <>
       {/* notices sit just under the header pills so they are seen where the eye already is */}
